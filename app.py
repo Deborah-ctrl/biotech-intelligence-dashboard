@@ -273,7 +273,7 @@ def explode_counts(df,col,top=15):
 def classify_ta(x):
     t=(x or '').lower()
     matches=[area for area,terms in TA_RULES.items() if terms and any(term in t for term in terms)]
-    return ' | '.join(matches) if matches else ('Registry condition: ' + ' / '.join(z.strip() for z in str(x or '').split(' | ') if z.strip()) if str(x or '').strip() else 'Condition not specified in registry')
+    return ' | '.join(matches) if matches else 'Unclassified'
 
 def modality(row):
     names=str(row.get('interventions','') or '').lower()
@@ -513,7 +513,7 @@ df=load_year(int(year))
 if df.empty: st.info('No local data for this year yet. Refresh from ClinicalTrials.gov.'); st.stop()
 df['therapeutic_area']=df.conditions.apply(classify_ta); df['modality']=df.apply(modality,axis=1)
 with st.sidebar:
-    st.divider(); st.subheader('Filters'); st.caption('Areas: matching specialties plus exact registered conditions when no specialty matches. Modalities: explicit evidence only; unspecified mechanisms are labeled as such. These are not independently validated drug annotations.') ; f_phase=st.multiselect('Phase',sorted(explode_counts(df,'phases',100)['phases'].tolist())); f_status=st.multiselect('Status',sorted(df.status.dropna().unique())); f_ta=st.multiselect('Therapeutic area',sorted(set(df.therapeutic_area.fillna('').str.split(' | ').explode().dropna()) - {''})); f_mod=st.multiselect('Modality',MODALITY_OPTIONS); sponsor_q=st.text_input('Sponsor contains'); condition_q=st.text_input('Condition contains'); country_q=st.text_input('Country contains')
+    st.divider(); st.subheader('Filters'); st.caption('Areas: broad specialty categories; unmatched registry conditions remain unclassified. Modalities: explicit evidence only; unspecified mechanisms are labeled as such. These are not independently validated drug annotations.') ; f_phase=st.multiselect('Phase',sorted(explode_counts(df,'phases',100)['phases'].tolist())); f_status=st.multiselect('Status',sorted(df.status.dropna().unique())); f_ta=st.multiselect('Therapeutic area',sorted(set(df.therapeutic_area.fillna('').str.split(' | ').explode().dropna()) - {''})); f_mod=st.multiselect('Modality',MODALITY_OPTIONS); sponsor_q=st.text_input('Sponsor contains'); condition_q=st.text_input('Condition contains'); country_q=st.text_input('Country contains')
 f=df.copy()
 if f_phase:f=f[f.phases.fillna('').apply(lambda x:any(v in x.split(' | ') for v in f_phase))]
 if f_status:f=f[f.status.isin(f_status)]
@@ -530,7 +530,15 @@ with tab1:
     with a:
         m=f.dropna(subset=['start_date_dt']).assign(month=lambda x:x.start_date_dt.dt.to_period('M').astype(str)).groupby('month').size().reset_index(name='trials'); st.plotly_chart(px.line(m,x='month',y='trials',markers=True,title='Trial starts by month'),width='stretch')
     with b:
-        ta=explode_counts(f,'therapeutic_area',max(1,len(f)*3)); ta.columns=['area','count']; st.plotly_chart(px.bar(ta,x='count',y='area',orientation='h',title='Therapeutic areas'),width='stretch')
+        ta=explode_counts(f,'therapeutic_area',max(1,len(TA_RULES)))
+        ta=ta[ta['therapeutic_area']!='Unclassified'].head(15).copy()
+        ta.columns=['area','count']
+        ta=ta.sort_values('count',ascending=True)
+        fig=px.bar(ta,x='count',y='area',orientation='h',title='Therapeutic areas (top 15)',template='plotly_dark')
+        fig.update_layout(height=540,margin=dict(l=8,r=15,t=55,b=25),paper_bgcolor='#0E1117',plot_bgcolor='#0E1117',font=dict(color='#FAFAFA'),yaxis_title=None,xaxis_title='Trials')
+        st.plotly_chart(fig,width='stretch')
+        unclassified=f['therapeutic_area'].eq('Unclassified').sum()
+        st.caption(f'{unclassified:,} of {len(f):,} trials could not be assigned to a broad specialty using registry condition keywords; these remain available in the trial data. Multi-area trials can be counted in more than one bar.')
     a,b=st.columns(2)
     with a:
         md=explode_counts(f,'modality',max(1,len(f)*3)); md.columns=['modality','count']; st.plotly_chart(px.bar(md,x='modality',y='count',title='Modality mix'),width='stretch')
@@ -795,4 +803,4 @@ with tab8:
             st.caption('A change between disclosures is a diligence signal, not evidence of a problem by itself. Review the underlying source and analysis population before drawing conclusions.')
     else: st.info('Enter an NCT ID to create or review its evidence package.')
 
-st.caption('Sources: ClinicalTrials.gov API v2, PubMed/NCBI E-utilities, plus user-curated external evidence records. V0.5C.2 adds resilient multi-source evidence discovery while preserving provenance-aware evidence packages and longitudinal data-cut history. External evidence is stored locally and is not automatically verified; derived prompts are questions for diligence, not conclusions about efficacy or trial quality.')
+st.caption('Sources: ClinicalTrials.gov API v2, PubMed/NCBI E-utilities, plus user-curated external evidence records. V0.5C.2 adds resilient multi-source evidence 
