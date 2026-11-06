@@ -803,4 +803,7 @@ with tab8:
             st.caption('A change between disclosures is a diligence signal, not evidence of a problem by itself. Review the underlying source and analysis population before drawing conclusions.')
     else: st.info('Enter an NCT ID to create or review its evidence package.')
 
-st.caption('Sources: ClinicalTrials.gov API v2, PubMed/NCBI E-utilities, plus user-curated external evidence records. V0.5C.2 adds resilient multi-source evidence 
+st.caption(
+    "Sources: ClinicalTrials.gov API v2, PubMed/NCBI E-utilities, "
+    "and user-curated external evidence records."
+)
